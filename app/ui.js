@@ -165,6 +165,18 @@ const UI = {
         UI.initSetting('repeaterID', '');
         UI.initSetting('reconnect', false);
         UI.initSetting('reconnect_delay', 5000);
+        {
+            const match = WebUtil.getConfigVar('forward_to', '')
+                .match(/^(?:(?:(wss?):\/\/)?([\w\d.-]+))?(?::(\d+))?(?:\/(.*))?$/);
+
+            UI.initSetting('forward_enable', Boolean(match));
+            UI.initSetting('forward_encrypt', (match && match[1])
+                ? (match[1] === 'wss')
+                : (window.location.protocol === "https:"));
+            UI.initSetting('forward_host', match && match[2] || window.location.hostname);
+            UI.initSetting('forward_port', match && match[3] || port);
+            UI.initSetting('forward_path', match && match[4] || null);
+        }
 
         UI.setupSettingLabels();
     },
@@ -357,6 +369,16 @@ const UI = {
         UI.addSettingChangeHandler('logging', UI.updateLogging);
         UI.addSettingChangeHandler('reconnect');
         UI.addSettingChangeHandler('reconnect_delay');
+        UI.addSettingChangeHandler('forward_enable');
+        UI.addSettingChangeHandler('forward_enable', UI.updateForwarder);
+        UI.addSettingChangeHandler('forward_encrypt');
+        UI.addSettingChangeHandler('forward_encrypt', UI.updateForwarder);
+        UI.addSettingChangeHandler('forward_host');
+        UI.addSettingChangeHandler('forward_host', UI.updateForwarder);
+        UI.addSettingChangeHandler('forward_port');
+        UI.addSettingChangeHandler('forward_port', UI.updateForwarder);
+        UI.addSettingChangeHandler('forward_path');
+        UI.addSettingChangeHandler('forward_path', UI.updateForwarder);
     },
 
     addFullscreenHandlers() {
@@ -1032,6 +1054,7 @@ const UI = {
         UI.rfb.scaleViewport = UI.getSetting('resize') === 'scale';
         UI.rfb.resizeSession = UI.getSetting('resize') === 'remote';
 
+        UI.updateForwarder(); // requires UI.rfb
         UI.updateViewOnly(); // requires UI.rfb
     },
 
@@ -1599,6 +1622,39 @@ const UI = {
         UI.desktopName = e.detail.name;
         // Display the desktop name in the document title
         document.title = e.detail.name + " - noVNC";
+    },
+
+    updateForwarder() {
+        if (UI.rfb.forwarderWs && UI.rfb.forwarderWs.readyState <= UI.rfb.forwarderWs.OPEN) {
+            UI.rfb.forwarderWs.onclose();
+            UI.rfb.forwarderWs.onopen = undefined;
+            UI.rfb.forwarderWs.onclose = undefined;
+            UI.rfb.forwarderWs.close();
+        }
+
+        if (UI.getSetting('forward_enable') && WebSocket) {
+            let forwardUrl;
+
+            forwardUrl = UI.getSetting('forward_encrypt') ? 'wss' : 'ws';
+
+            forwardUrl += '://' + UI.getSetting('forward_host');
+            if (UI.getSetting('forward_port')) {
+                forwardUrl += ':' + UI.getSetting('forward_port');
+            }
+            if (UI.getSetting('forward_path')) {
+                forwardUrl += '/' + UI.getSetting('forward_path');
+            }
+
+            UI.rfb.forwarderWs = new WebSocket(forwardUrl);
+            UI.rfb.forwarderWs.onopen = () => {
+                UI.showStatus("Forwarding active");
+            };
+            UI.rfb.forwarderWs.onclose = () => {
+                UI.showStatus("Forwarding inactive", "warning");
+            };
+        } else {
+            UI.rfb.forwarderWs = undefined;
+        }
     },
 
     bell(e) {

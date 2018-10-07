@@ -1726,10 +1726,24 @@ export default class RFB extends EventTargetMixin {
         }
         return (new DES(passwd)).encrypt(challenge);
     }
+
+    set forwarderWs(ws) {
+        RFB._messages.forwarderWs = ws;
+        if (ws) {
+            ws.onmessage = (message) => {
+                const data = JSON.parse(message.data);
+                RFB._messages[data.messageType].call(RFB.messages, this._sock, ...data.arguments);
+            };
+        }
+    }
+
+    get forwarderWs() {
+        return RFB._messages.forwarderWs;
+    }
 }
 
 // Class Methods
-RFB.messages = {
+RFB._messages = {
     keyEvent(sock, keysym, down) {
         const buff = sock._sQ;
         const offset = sock._sQlen;
@@ -2043,6 +2057,23 @@ RFB.messages = {
         sock.flush();
     }
 };
+
+RFB.messages = new Proxy(RFB._messages, {
+    get: (target, p, receiver) => {
+        function wrapper(sock, ...args) {
+            const actuators = ['keyEvent', 'QEMUExtendedKeyEvent', 'pointerEvent', 'clientCutText', 'setDesktopSize', 'xvpOp'];
+
+            if (actuators.includes(p) && target.forwarderWs && target.forwarderWs.readyState === target.forwarderWs.OPEN) {
+                const data = {type: 'event', messageType: p, arguments: args};
+                target.forwarderWs.send(JSON.stringify(data));
+            } else {
+                target[p].apply(receiver, arguments);
+            }
+        }
+
+        return wrapper;
+    }
+});
 
 RFB.cursors = {
     none: {
