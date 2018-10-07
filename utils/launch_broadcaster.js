@@ -7,13 +7,6 @@ const WebSocket = require('ws');
 const server = new http.createServer();
 const wss = new WebSocket.Server({server});
 
-const vncServers = fs.readFileSync('server-setup/done.tsv', 'utf8')
-    .split('\n').filter(row => row !== '')
-    .map(row => row.split('\t'))
-    .filter(([ip, pw, ...details]) => pw !== 'FAIL')
-    .map(([ip, pw, ...details]) => ({host: ip, password: pw, port: details[0], domain: details[1], wsPort: 443}));
-console.log(vncServers);
-
 function logEvent(event) {
     console.log(JSON.stringify(event));
     //console.log(event)
@@ -40,26 +33,56 @@ server.on('request', (req, res) => {
 
     switch (req.url) {
         case "/":
-            try {
+            fs.readFile('server-setup/done.tsv', 'utf8', (err, data) => {
+                if (err) {
+                    console.error(err);
+                    res.statusCode = 500;
+                    res.end("Server error");
+                    return;
+                }
+
                 res.write(`<!DOCTYPE HTML>`);
                 res.write(`
 <html>
-        <head>
-        </head>
-        <body>`);
-
-                for (let vncServer of vncServers) {
-                    res.write(`
-            <iframe src="/vnc.html?host=${vncServer.domain}&port=${vncServer.wsPort}&password=${vncServer.password}&autoconnect=1&forward_to=/"></iframe>`);
-                }
-
-                res.write(`
-        </body>
-</html>`);
-            } catch (e) {
-                logEvent({type: 'error', error: e});
+    <head>
+        <style>
+            iframe {
+                width: 300px;
+                height: 150px;
+                border-width: 2px;
             }
-            res.end("\n");
+            
+            .iframeCover {
+                width: 300px;
+                height: 150px;
+                border: 2px transparent;
+                display: inline-block;
+                position: absolute;
+            }
+        </style>
+    </head>
+    <body>`);
+                data.split('\n').filter(row => row !== '')
+                    .map(row => row.split('\t'))
+                    .filter(([ip, pw, ...details]) => pw !== 'FAIL')
+                    .map(([ip, pw, ...details]) => ({
+                        host: ip,
+                        password: pw,
+                        port: details[0],
+                        domain: details[1],
+                        wsPort: 443
+                    }))
+                    .forEach((vncServer) => {
+                        const link = `/vnc.html?host=${vncServer.domain}&port=${vncServer.wsPort}&password=${vncServer.password}&autoconnect=1&forward_to=/`;
+                        res.write(`
+            <a class="iframeCover" href="${link}" target="_blank"></a>
+            <iframe src="${link}&view_only=1"></iframe>`);
+                    });
+                res.write(`
+    </body>
+</html>`);
+                res.end("\n");
+            });
             break;
 
         default:
