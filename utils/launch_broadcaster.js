@@ -7,8 +7,11 @@ const WebSocket = require('ws');
 const server = new http.createServer();
 const wss = new WebSocket.Server({server});
 
-const vncServers = [];
-
+const vncServers = fs.readFileSync('server-setup/done.tsv', 'utf8')
+    .split('\n')
+    .map(row => row.split('\t'))
+    .map(([ip, pw, ...details]) => ({host: ip, password: pw, port: details[0], domain: details[1], wsPort: 443}));
+console.log(vncServers);
 
 function logEvent(event) {
     console.log(JSON.stringify(event));
