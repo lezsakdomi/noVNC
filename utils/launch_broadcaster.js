@@ -8,8 +8,9 @@ const server = new http.createServer();
 const wss = new WebSocket.Server({server});
 
 const vncServers = fs.readFileSync('server-setup/done.tsv', 'utf8')
-    .split('\n')
+    .split('\n').filter(row => row !== '')
     .map(row => row.split('\t'))
+    .filter(([ip, pw, ...details]) => pw !== 'FAIL')
     .map(([ip, pw, ...details]) => ({host: ip, password: pw, port: details[0], domain: details[1], wsPort: 443}));
 console.log(vncServers);
 
