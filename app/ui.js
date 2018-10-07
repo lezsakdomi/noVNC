@@ -114,6 +114,8 @@ const UI = {
         if (typeof callback === "function") {
             callback(UI.rfb);
         }
+
+        window.UI = UI;
     },
 
     initFullscreen() {
